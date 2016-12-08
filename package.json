@@ -9,6 +9,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "color-convert": "^1.8.2",
+    "delta-e": "0.0.7",
     "mongoose": "^4.6.3",
     "restify": "^4.1.1"
   }
