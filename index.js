@@ -2,6 +2,8 @@ const restify = require('restify')
 const mongoose = require('mongoose')
 const convert = require('color-convert')
 const DeltaE = require('delta-e')
+const paper = require('paper')
+const fs = require('fs')
 
 mongoose.connect('mongodb://localhost/scrape')
 
@@ -12,6 +14,80 @@ const pageSize = 10
 function respond(req, res, next) {
   res.send('hello ' + req.params.name);
   next();
+}
+
+getAverageColor = (req, res, next) => {
+    const id = req.params.id
+    const point = req.params.point
+    const dimensions = req.params.dimensions
+
+    exportJPEG = function(canvas) {
+        const out = fs.createWriteStream('image.png')
+        const stream = canvas.pngStream()
+
+        stream.on('data', function(chunk) {
+            out.write(chunk)
+        })
+
+        stream.on('end', function() {
+            console.log('end')
+        })
+        // const img = canvas.toDataURL()
+        // // strip off the data: url prefix to get just the base64-encoded bytes
+        // const data = img.replace(/^data:image\/\w+;base64,/, "")
+        // const buf = new Buffer(data, 'base64')
+        // fs.writeFile('image.png', buf) 
+    }
+    
+
+    onFind = (err, product) => {
+        if (err) {
+            logger.error(err)
+            next()
+        }
+
+        const imgPoint = {
+            x: Number.parseInt(point.split('-')[0]),
+            y: Number.parseInt(point.split('-')[1])
+        }
+        const imgDim = {
+            width: Number.parseInt(dimensions.split('-')[0]),
+            height: Number.parseInt(dimensions.split('-')[1])
+        }
+
+        const canvas = new paper.Canvas(imgDim.width, imgDim.height)
+        paper.setup(canvas)
+
+        const layer = paper.project.activeLayer
+
+        const raster = new paper.Raster({
+            source: product.imgHref,
+            position: paper.view.center
+        })
+        raster.onLoad = () => {
+            // paper.view.viewSize = new paper.Size(imgDim.width, imgDim.height)
+            raster.fitBounds(paper.view.bounds, true)
+
+            // console.log(`x: ${imgPoint.x}, y: ${imgPoint.y}`)
+            const color = raster.getAverageColor(new paper.Point(imgPoint.x, imgPoint.y))
+
+            // var c = new paper.Shape.Circle(new paper.Point(imgPoint.x, imgPoint.y), 10)
+            // c.strokeColor = 'white'
+            // raster.addChild(c)
+
+            // layer.insertChild(0, raster)
+
+            // paper.view.update()
+
+            // exportJPEG(canvas)
+
+            res.send(color.toCSS(true))
+            next()
+        }
+
+    }
+
+    productModel.findOne({_id: id}).exec(onFind)
 }
 
 var getStore = function(req, res, next) {
@@ -145,6 +221,8 @@ db.once('open', function() {
     server.get('/user/:id', getUser)
 
     server.get('/store/color/:color', getByColor)
+
+    server.get('/average/:id/:point/:dimensions', getAverageColor)
 
     server.listen(8082, function() {
         console.log('%s listening at %s', server.name, server.url);
