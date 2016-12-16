@@ -207,22 +207,29 @@ getByColor = (req, res, next) => {
     const labColor = convert.hex.lab(color)
 
     const onFind = (err, products) => {
-        
+        if (err) {
+            res.send([])
+            next()
+            return
+        }
+
         const filteredProducts = products.filter((product) => {
             let res = false
             for (swatch in product.palette) {
-                const pColor = product.palette[swatch].substring(1)
-                const pLabColor = convert.hex.lab(pColor)
-                
-                const dE = DeltaE.getDeltaE76({L: labColor[0], A: labColor[1], B: labColor[2]}, {L: pLabColor[0], A: pLabColor[1], B: pLabColor[2]})
-                console.log(`DeltaE between ${labColor} and ${pLabColor} : ${dE}`)
+                if (product.palette[swatch]) {
+                    const pColor = product.palette[swatch].substring(1)
+                    const pLabColor = convert.hex.lab(pColor)
+                    
+                    const dE = DeltaE.getDeltaE76({L: labColor[0], A: labColor[1], B: labColor[2]}, {L: pLabColor[0], A: pLabColor[1], B: pLabColor[2]})
+                    console.log(`DeltaE between ${labColor} and ${pLabColor} : ${dE}`)
 
-                if (dE < 10) {
-                    res = true
-                    break
+                    if (dE < 10) {
+                        res = true
+                        break
+                    }
                 }
             }
-
+            
             return res
         })
 
