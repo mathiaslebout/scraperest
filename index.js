@@ -4,6 +4,8 @@ const convert = require('color-convert')
 const DeltaE = require('delta-e')
 const paper = require('paper')
 const fs = require('fs')
+const Vibrant = require('node-vibrant')
+const ColorThief = require('./color-thief')
 
 mongoose.connect('mongodb://localhost/scrape')
 
@@ -16,29 +18,116 @@ function respond(req, res, next) {
   next();
 }
 
+exportJPEG = function(canvas, filename, callback) {
+    const out = fs.createWriteStream(`${filename}.png`)
+    const stream = canvas.pngStream()
+
+    stream.on('data', function(chunk) {
+        out.write(chunk)
+    })
+
+    stream.on('end', function() {
+        // logger.debug('end')
+
+        // const colorThief = new ColorThief()
+        // const color = colorThief.getColor(`${filename}.png`) 
+
+        callback(null, color)
+
+        // Vibrant.from(`${filename}.png`).getPalette((err, palette) => {
+        //     if (err) {
+        //         // logger.error(err)
+        //         return callback(err)
+        //     }
+        //     // logger.debug(palette)
+        //     callback(null, palette)
+        // })        
+    })
+    // const img = canvas.toDataURL()
+    // // strip off the data: url prefix to get just the base64-encoded bytes
+    // const data = img.replace(/^data:image\/\w+;base64,/, "")
+    // const buf = new Buffer(data, 'base64')
+    // fs.writeFile('image.png', buf) 
+}
+
+border = (req, res, next) => {
+    const id = req.params.id
+
+    onFind = (err, product) => {
+        if (err) {
+            logger.error(err)
+            next()
+        }
+
+        const canvas = new paper.Canvas(1000, 1000)
+        paper.setup(canvas)
+
+        const raster = new paper.Raster({
+            source: product.imgHref,
+            // position: paper.view.center
+        })
+        raster.onLoad = () => {
+            canvas.width = raster.width
+            canvas.height = raster.height
+
+            paper.view.viewSize = new paper.Size(raster.width, raster.height)
+
+            raster.fitBounds(paper.view.size)
+
+            raster.visible = false
+
+            let w = 0
+            let z = 0
+            for (let x = 0; x < raster.width; x++) {
+                for (let y = 0; y < raster.height; y ++) {
+                    if ((x >= 10 && x <= (raster.width - 10))
+                        && (y >= 10 && y <= (raster.height - 10))) {
+                        
+                        // const rect = paper.Path.Rectangle(x, y, 1, 1)
+                        // rect.fillColor = new paper.Color(255, 255, 255)                        
+                    } else {
+                        const color = raster.getPixel(x, y)
+                        const rect = paper.Path.Rectangle(w, z, 1, 1)
+                        rect.fillColor = color
+
+                        if (w == raster.width) {
+                            w = 0
+                            z ++
+                        } else {
+                            w ++
+                        }
+                    }
+                }
+            }
+
+            paper.view.viewSize = new paper.Size(w, z)
+
+            paper.view.update()
+
+            const colorThief = new ColorThief()
+            const dominantColors = colorThief.getDominantColors(raster)
+
+            // exportJPEG(canvas, id, () => {})
+
+            res.send(dominantColors) 
+            next()
+
+            // exportJPEG(canvas, id, (err, palette) => {
+            //     res.send(err ? err : palette)
+            //     next()
+
+            // })
+
+        }
+    }
+
+    productModel.findOne({_id: id}).exec(onFind)
+}
+
 getAverageColor = (req, res, next) => {
     const id = req.params.id
     const point = req.params.point
     const dimensions = req.params.dimensions
-
-    exportJPEG = function(canvas) {
-        const out = fs.createWriteStream('image.png')
-        const stream = canvas.pngStream()
-
-        stream.on('data', function(chunk) {
-            out.write(chunk)
-        })
-
-        stream.on('end', function() {
-            console.log('end')
-        })
-        // const img = canvas.toDataURL()
-        // // strip off the data: url prefix to get just the base64-encoded bytes
-        // const data = img.replace(/^data:image\/\w+;base64,/, "")
-        // const buf = new Buffer(data, 'base64')
-        // fs.writeFile('image.png', buf) 
-    }
-    
 
     onFind = (err, product) => {
         if (err) {
@@ -214,15 +303,25 @@ db.once('open', function() {
     server.head('/hello/:name', respond);
 
     server.get('/store', getStore);
-    server.get('/store/:page', getStore);
     server.get('/store/size/:size', getBySize);
 
     server.post('/user', createUser)
     server.get('/user/:id', getUser)
 
+    // get a page of products (page size is 10 products)
+    server.get('/store/:page', getStore);
+
+    // get the list of products by prominent color 
+    // color: the hexadecimal color identifier (with no # character)
     server.get('/store/color/:color', getByColor)
 
+    // get the average color given a single point
+    // id: the database identifier of the product 
+    // point: the x,y coordinates of the point in the image coordinates system (format "x-y")
+    // dimensions: the width and height of the image (format "width-height")
     server.get('/average/:id/:point/:dimensions', getAverageColor)
+
+    server.get('/border/:id', border)
 
     server.listen(8082, function() {
         console.log('%s listening at %s', server.name, server.url);
