@@ -7,7 +7,7 @@ const fs = require('fs')
 const Vibrant = require('node-vibrant')
 const ColorThief = require('./color-thief')
 
-mongoose.connect('mongodb://scraper.site/scrape')
+mongoose.connect('mongodb://scrape:scrape123@scraper.site/scrape')
 
 var productModel = null;
 
